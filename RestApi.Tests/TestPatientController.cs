@@ -1,6 +1,7 @@
 ﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
 using RestApi.Controllers;
 using RestApi.Models;
+using StructureMap;
 using System;
 using System.Linq;
 using System.Net;
@@ -11,10 +12,10 @@ namespace RestApi.Tests
     [TestClass]
     public class TestPatientController
     {
-        private IPatientContext InitialiseTestData()
-        {
-            var patientContext = new TestPatientContext();
+        PatientsController _controller = null;
 
+        private void InitialiseTestData(IPatientContext patientContext)
+        {
             patientContext.Patients.Add(new Patient
             {
                 DateOfBirth = new DateTime(1972, 10, 27),
@@ -41,16 +42,28 @@ namespace RestApi.Tests
                 EpisodeId = 1,
                 PatientId = 1
             });
+        }
 
-            return patientContext;
+        [TestInitialize]
+        public void Initialise()
+        {
+            var container = new Container();
+            container.Configure((c) =>
+            {
+                c.For<IPatientContext>().Use<TestPatientContext>();
+            });
+
+            var instance = container.GetInstance<IPatientContext>();
+             _controller = container.With<IPatientContext>(instance)
+                                    .GetInstance<PatientsController>();
+
+            InitialiseTestData(instance);
         }
 
         [TestMethod]
         public void TestCorrectPatientIsReturnedWithTheCorrectEpisode()
         {
-            var patientContext = InitialiseTestData();
-            var controller = new PatientsController(patientContext);
-            var patient = controller.Get(1);
+            var patient = _controller.Get(1);
 
             Assert.IsNotNull(patient);
             Assert.AreEqual(1, patient.PatientId);
@@ -62,18 +75,15 @@ namespace RestApi.Tests
         }
 
         [TestMethod]
-        public void TestIfPatientIsNotFoundA404ExceptionIsThrown()
+        public void TestIfPatientIsNotFoundANotFoundExceptionIsThrown()
         {
             HttpResponseException expectedException = null;
 
-            var patientContext = InitialiseTestData();
-            var controller = new PatientsController(patientContext);
-
             try
             {
-                var patient = controller.Get(3);
+                var patient = _controller.Get(3);
             }
-            catch(HttpResponseException ex)
+            catch (HttpResponseException ex)
             {
                 expectedException = ex;
             }
@@ -83,16 +93,13 @@ namespace RestApi.Tests
         }
 
         [TestMethod]
-        public void TestIfPatientHasNoEpisodesA404ExceptionIsThrown()
+        public void TestIfPatientHasNoEpisodesANotFoundExceptionIsThrown()
         {
             HttpResponseException expectedException = null;
-
-            var patientContext = InitialiseTestData();
-            var controller = new PatientsController(patientContext);
-
+            
             try
             {
-                var patient = controller.Get(2);
+                var patient = _controller.Get(2);
             }
             catch (HttpResponseException ex)
             {
